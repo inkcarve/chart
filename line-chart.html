@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=0" />
+<meta name="format-detection" content="telephone=no">
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black" />
+  <title>SVG D3.js - 座標軸 ( Axis ) - demo 4</title>
+  <script src="js/jquery/jquery.min.js?v2.0.1" type="text/javascript"></script>
+<script src="js/d3/d3.v3.min.js"></script>
+</head>
+<style>
+body {
+    font-family: Arial, "微软雅黑";
+    padding: 15px;
+}
+
+#lineChart {
+    width: 100%;
+    position: relative;
+}
+
+#lineChart svg {
+    width: 100%;
+}
+
+#lineChart .legend text {
+    text-anchor: middle;
+    font-size: 12px;
+    fill: #999;
+}
+
+#lineChart .legend rect {
+  fill:#fff;
+}
+
+#lineChart .axis-x-text text {
+    text-anchor: middle;
+    font-size: 14px;
+    fill: #555;
+}
+</style>
+<body>
+  <div id="lineChart">
+  </div>
+  <script>
+
+  //data 的 value 要先轉成數字
+  var data = [{
+            month: 11,
+            value: 89123
+        }, {
+            month: 12,
+            value: 12231
+        }, {
+            month: 1,
+            value: 34561
+        }, {
+            month: 2,
+            value: 100000
+        }];
+
+  var colors={
+            dot: '#158e47',
+            line: '#158e47',
+            dashLine: '#84b49c'
+        };
+
+  var id="lineChart";
+  var element=$("#lineChart");
+
+  var nextMonth = data[data.length - 1].month + 1;
+            var chart_W = 7; // 字元 width 拿來判斷文字寬度是否重疊
+
+            //判斷最月份是否大於12，大於12則為1
+            data.push({
+                month: nextMonth>12 ? 1 : nextMonth,
+                value: 0,
+                last: true
+            });
+
+            var dataCount = data.length;
+
+            function build() {
+
+                var boxRatio = 3 / 7,
+                    box_W = $(element).width(),
+                    box_H = box_W * boxRatio,
+                    chart_padding_X = 40;
+                var text_H = 16;
+                var text_padding_Y = 5;
+                var circle_W = 3;
+                var text_Box_H = text_H + text_padding_Y + circle_W / 2;
+                var asix_X_Text_H = text_H + text_padding_Y;
+                var chart_H = box_H - text_Box_H;
+                console.log(box_W);
+                // get maxY
+                var maxY = 0;
+                data.forEach(function(d, i) {
+                    maxY = Math.max(d.value, maxY);
+                });
+
+                //創建svg
+                var svg = d3.select('#' + id)
+                    .append("svg")
+                    .append("g").attr("class", "box");
+
+                svg.append('g').attr('class', 'line');
+                svg.append('g').attr('class', 'dot');
+                svg.append('g').attr('class', 'legend');
+                svg.append('g').attr('class', 'axis-x-text');
+
+                $(element).find('svg').attr({
+                    'width': box_W,
+                    'height': box_H + text_padding_Y
+                });
+                svg.attr({
+                    'transform': 'translate(0,' + (box_H - asix_X_Text_H) + ')'
+                });
+
+                var scaleX = d3.scale.linear()
+                    .range([chart_padding_X, (box_W - chart_padding_X)])
+                    .domain([0, dataCount - 1]);
+
+                var scaleY = d3.scale.linear()
+                    .range([0, (-chart_H + asix_X_Text_H)])
+                    .domain([0, maxY]);
+
+                    //建立X軸標示
+                /*var axisX = d3.svg.axis()
+                    .scale(scaleX)
+                    .orient("bottom")
+                    .ticks(10)
+                    .tickFormat(function(d) {
+                        return d + 'n';
+                    });
+
+                //建立Y軸標示
+                var axisY = d3.svg.axis()
+                    .scale(scaleY)
+                    .orient("left")
+                    .ticks(5)
+                    .tickFormat(function(d) {
+                        return d + '%';
+                    });*/
+
+
+                var line = svg.select('.line').selectAll('g').select('polyline').data(data);
+
+                line.enter().append('polyline').attr({
+                    'points': function(d, i) {
+                        var pos = [];
+                        var posX = scaleX(i);
+                        var posY = scaleY(d.value);
+                        pos[0] = posX;
+                        pos[1] = posY;
+                        data[i].pos = [posX, posY];
+                        if (i == 0) {
+                            return [
+                                [0, 0], pos
+                            ]
+                        }
+                        var lastIndex = i - 1;
+                        var lastData = data[i - 1];
+                        if (d.last !== undefined) {
+                            return [
+                                [scaleX(i - 1), scaleY(lastData.value)], pos, [box_W, 0]
+                            ];
+                        }
+                        return [
+                            [scaleX(i - 1), scaleY(lastData.value)], pos
+                        ]
+
+                    },
+                    'stroke': function(d, i) {
+                        return d.last ? colors.dashLine : colors.line
+                    },
+                    'stroke-dasharray': function(d, i) {
+                        if (d.last !== undefined) {
+                            return (5, 5);
+                        }
+                    },
+                    'fill': 'none'
+                        //折線圖也要套用 translate
+                });
+
+                var dot = svg.select('.dot').selectAll('g').data(data);
+
+                dot.enter().append('circle').attr({
+                    'transform': function(d, i) {
+                        return 'translate(' + [d.pos[0], d.pos[1]] + ')';
+                    },
+                    'r': circle_W,
+                    'fill': function(d, i) {
+                        return d.last ? '#fff' : colors.dot
+                    },
+                    'stroke-width': '1px',
+                    'stroke': function(d, i) {
+                        return d.last ? colors.dashLine : colors.dot
+                    }
+                });
+
+                var legend = svg.select('.legend').selectAll('g').data(data);
+                legend.enter().append('g').attr('class', 'legend-g');
+                legend.append('text').text(function(d) {
+                    return d.value;
+                }).attr({
+                    'transform': function(d, i) {
+                        var posY = d.pos[1] - text_Box_H / 2;
+                        var posX = d.pos[0];
+                        var width = d.value.toString().length * char_W;
+                        if (posX - width / 2 - 4 <= 0) {
+                            posX = posX - (posX - width / 2 - 4);
+                        }
+                        if (posX + width / 2 + 4 >= box_W) {
+                            posX = posX - (posX + width / 2 + 4 - box_W);
+                        }
+                        if (i > 0) {
+                            var lastData = data[i - 1];
+                            var boxBottom = d.pos[1];
+                            var boxTop = d.pos[1] - text_Box_H;
+                            var lastBottom = lastData.legendPosY + text_Box_H / 2;
+                            var lastTop = lastData.legendPosY - text_Box_H / 2;
+                            if (d.pos[0] - 4 - width < lastData.pos[0]) {
+                                if (boxBottom <= lastBottom && boxBottom >= lastTop) {
+                                    posY = -posY > chart_H / 2 ? lastData.legendPosY + text_Box_H : lastData.legendPosY - text_Box_H;
+                                }
+                                if (boxTop <= lastBottom && boxTop >= lastTop) {
+                                    posY = -posY > chart_H / 2 ? lastData.legendPosY + text_Box_H : lastData.legendPosY - text_Box_H;
+                                }
+                            }
+                        }
+                        data[i].legendPosY = posY;
+                        return 'translate(' + [posX, posY] + ')';
+                    }
+                });
+
+                var axis = svg.select('.axis-x-text').selectAll('g').data(data);
+
+                axis.enter().append('text').text(function(d) {
+                    return d.month + '月';
+                }).attr({
+                    'transform': function(d, i) {
+                        return 'translate(' + [d.pos[0], asix_X_Text_H] + ')';
+                    }
+                });
+
+            }
+            build();
+
+            $(window).resize(function(){
+              $('#' + id).empty();
+              build();
+            });
+  </script>
+</body>
+
+</html>

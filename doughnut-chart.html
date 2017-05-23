@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=0" />
+<meta name="format-detection" content="telephone=no">
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black" />
+<style>
+body {
+    font-family: Arial, "微软雅黑";
+    padding: 15px;
+}
+
+#donutChart {
+    width: 100%;
+    height: 100%;
+    position: relative;
+}
+
+#donutChart svg {
+    width: 100%;
+    height: 100%;
+}
+
+#donutChart path.slice {
+    stroke-width: 2px;
+}
+
+#donutChart polyline {
+    opacity: 1;
+    stroke: black;
+    stroke-width: 1px;
+    fill: none;
+}
+
+#donutChart .labelValue {
+    font-size: 60%;
+    opacity: .5;
+}
+
+#donutChart .toolTip {
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    position: absolute;
+    display: none;
+    width: auto;
+    height: auto;
+    background: none repeat scroll 0 0 white;
+    border: 0 none;
+    border-radius: 8px 8px 8px 8px;
+    box-shadow: -3px 3px 15px #888888;
+    color: black;
+    font: 12px sans-serif;
+    padding: 5px;
+    text-align: center;
+}
+
+#donutChart text {
+    font-size: 14px;
+    fill: #666;
+    dominant-baseline: central;
+}
+
+#donutChart .legend text {
+    text-anchor: middle;
+    font-size: 16px;
+    font-weight: 600;
+    fill: #333;
+}
+</style>
+<script src="js/jquery/jquery.min.js?v2.0.1" type="text/javascript"></script>
+<script src="js/d3/d3.v3.min.js"></script>
+
+<body>
+    <div id="donutChart"></div>
+    <script>
+    // 外部資料 顏色、資料、標題註解
+    var colors = [
+        "#89c997",
+        "#32b16c",
+        "#009944",
+        "#007130",
+        "#00561f"
+    ];
+
+    //data 的 value 要先轉成數字
+    var data = [{
+        label: "代缴",
+        value: 13.00
+    }, {
+        label: "刷卡",
+        value: 9.00
+    }, {
+        label: "第三方",
+        value: 50.00
+    }, {
+        label: "转账",
+        value: 9.00
+    }, {
+        label: "其它",
+        value: 12.00
+    }];
+
+    var legendData = {
+        "title": "本月支出",
+        "value": 123456789
+    };
+
+    var id = "donutChart";
+
+    //創建svg
+    var svg = d3.select("#donutChart")
+        .append("svg")
+        .append("g").attr("class", "box");
+
+    svg.append("g")
+                    .attr("class", "slices");
+                svg.append("g")
+                    .attr("class", "labelName");
+                svg.append("g")
+                    .attr("class", "labelValue");
+                svg.append("g")
+                    .attr("class", "lines");
+
+                // legrnd 參數
+                var legend_H = 16;
+                var legend_Padding = 5;
+                // polyline, text 參數
+                var rightText = [],
+                    leftText = [];
+                var text_H = 16;
+                var padding = 3;
+                var strokeWidth = 1;
+                var text_translate_H = (text_H + padding + strokeWidth) / 2;
+                var text_Box_H = text_H + padding + strokeWidth / 2;
+                var line_Dot_Width = 3;
+                // 因為文字造成位移 參數
+                var offsetTop = {
+                        l: 0,
+                        r: 0,
+                        getMax: function() {
+                            return Math.max(this.l, this.r);
+                        }
+                    },
+                    offsetBottom = {
+                        l: 0,
+                        r: 0,
+                        getMax: function() {
+                            return Math.max(this.l, this.r);
+                        }
+                    };
+
+                var boxRatio = 4 / 7;
+                var box = $("#" + id);
+                var box_W = $("#" + id).width();
+                var box_H = box_W * boxRatio,
+                    radius = Math.min(box_W, box_H) / 2;
+
+                var pie = d3.layout.pie()
+                    .sort(null)
+                    .value(function(d) {
+                        return d.value;
+                    });
+
+                var arc_Outer_R = radius * 0.75;
+                var arc = d3.svg.arc()
+                    .outerRadius(radius * 0.75)
+                    .innerRadius(radius * 0.6);
+
+                var text_R = radius * 0.8;
+                var outerArc = d3.svg.arc()
+                    .innerRadius(radius * 0.8)
+                    .outerRadius(radius * 0.8);
+
+                var legendRectSize = (radius * 0.05);
+                var legendSpacing = radius * 0.02;
+
+                svg.attr("transform", "translate(" + (box_W / 2) + "," + text_R + ")");
+                d3.select("#" + id + " svg").attr({
+                    "wdith": box_W,
+                    "height": (text_R) * 2
+                });
+
+                var d90 = {
+                    startAngle: Math.PI / 2,
+                    endAngle: Math.PI / 2
+                }
+                var d270 = {
+                    startAngle: -(Math.PI / 2),
+                    endAngle: -(Math.PI / 2)
+                }
+
+                /*
+                {
+                label:"代缴", 
+                value:10.00,
+                sideValue: 1 or -1 , 1:right , -1:left
+                sideIndex: 那一邊第幾個
+                }
+                */
+
+                // 資料預先處理
+                var total = 0,
+                    now = 0,
+                    rNum = 0,
+                    lNum = 0;
+                // 數值加總
+                data.forEach(function(d, i) {
+                    total += d.value;
+                });
+                for (i = 0; i < data.length; i++) {
+
+                    //text 輸出文字 使用
+                    data[i].text = data[i].value;
+                    if(now==0 && i==data.length-1 &&data[i].value==0){
+                        //全部都0，加假數字跑圓圖
+                        data[i].value=100;
+                    }else{
+                        //value 數算數字，將text與value分開
+                        data[i].value = data[i].value;
+                    }
+                    var ifRight = data[i].value>0? ((((data[i].value / 2) + now) / total) <= 0.5):(i==data.length-1?false:true);
+                    data[i].sideValue = ifRight ? 1 : -1;
+                    if (ifRight) {
+                        data[i].sideIndex = rNum;
+                        rNum++;
+                    } else {
+                        data[i].sideIndex = lNum;
+                        lNum++;
+                    }
+                    now += data[i].value;
+                }
+
+                draw();
+
+                function draw() {
+
+                    /* ------- PIE SLICES -------*/
+                    var slice = svg.select(".slices").selectAll("path.slice")
+                        .data(pie(data), function(d) {
+                            return d.data.label
+                        });
+
+                    slice.enter()
+                        .insert("path")
+                        .style("fill", function(d, i) {
+                            return colors[i];
+                        })
+                        .attr("class", "slice");
+
+                    slice
+                        .transition().duration(1000)
+                        .attrTween("d", function(d) {
+                            this._current = this._current || d;
+                            var interpolate = d3.interpolate(this._current, d);
+                            this._current = interpolate(0);
+                            return function(t) {
+                                return arc(interpolate(t));
+                            };
+                        });
+
+                    slice.exit().remove();
+
+
+                    // 創建 legend 
+                    var legend = svg.selectAll('.legend')
+                        .data([{legendData:legendData}])
+                        .enter()
+                        .append('g')
+                        .attr('class', 'legend');
+
+                    legend.append('text').text(function(d) {
+                        return (d.legendData.title);
+                    }).attr("transform", function(d) {
+                        return "translate(0," + (-(legend_H / 2) - (legend_Padding / 2)+legend_Padding) + ")";
+                    });
+                    legend.append('text').text(function(d) {
+                        return d.legendData.value;
+                    }).attr("transform", function(d) {
+                        return "translate(0," + ((legend_H / 2) + (legend_Padding / 2)+legend_Padding) + ")";
+                    });
+
+                    /* ------- TEXT LABELS -------*/
+
+                    var text = svg.select(".labelName").selectAll("g")
+                        .data(pie(data), function(d) {
+                            return d.data.label
+                        });
+
+                    text.enter()
+                        .append("g");
+                    text.append('text').text(function(d) {
+                        return d.data.text;
+                    }).attr("transform", function(d, i) {
+                        return "translate(0," + (-text_translate_H+padding/2) + ")";
+                    });
+
+                    // text 
+                    text.append('text').text(function(d) {
+                        return (d.data.label);
+                    }).attr("transform", function(d) {
+                        return "translate(0," + (text_translate_H+padding*2) + ")";
+                    });
+
+                    text.append('circle').attr({
+                        "fill": function(d, i) {
+                            return colors[i];
+                        },
+                        "r": line_Dot_Width,
+                        "transform": function(d) {
+                            var posX = d.data.sideValue == 1 ? line_Dot_Width : -line_Dot_Width;
+                            return ('translate(' + posX + ',0)');
+                        }
+                    });
+
+                    function midAngle(d) {
+                        return d.startAngle + (d.endAngle - d.startAngle) / 2;
+                    }
+
+                    text.attr("transform", function(d) {
+                            this._current = this._current || d;
+                            var interpolate = d3.interpolate(this._current, d);
+                            var d2 = interpolate(0);
+                            // pos 文字連接位置
+                            var pos = arc.centroid(d2);
+                            var ifRightSide = d.data.sideValue>0;
+
+                            function getPosY(pY) {
+                                // pY 是這筆的 Y位置
+                                // side 是對比用的資料陣列，根據左邊或右邊來決定讀取哪一個
+                                var side = ifRightSide ? rightText : leftText;
+                                var sideIndex = d2.data.sideIndex;
+                                // sidePos 是上一筆的位置
+
+                                var sidePos = side[sideIndex - 1]["data"].pos[1];
+                                var sideTop = sidePos - (text_translate_H * 2);
+                                var sideBottom = sidePos + (text_translate_H * 2);
+                                if (sideIndex = 0) {
+                                    return pY;
+                                }
+
+                                //RightSide cover sideBottom
+                                if (ifRightSide && (((pY - (text_translate_H * 2)) <= sideBottom))) {
+                                    return sideBottom + text_H + padding * 2 + (strokeWidth / 2);
+                                }
+                                //LeftSide cover sideTop
+                                if ((!ifRightSide) && (((pY + (text_translate_H * 2)) >= sideTop))) {
+                                    return sideTop - (text_H + padding * 2 + (strokeWidth / 2));
+                                }
+                                return pY;
+                            }
+
+                            pos[0] = radius * 1.65 * d2.data.sideValue;
+                            pos[1] = d2.data.sideIndex > 0 ? getPosY(pos[1]) : pos[1];
+
+                            d2.data.pos = [];
+                            d2.data.pos = d2.data.pos.concat(pos);
+
+                            if (ifRightSide) {
+                                rightText.push(d2);
+
+                            } else {
+                                leftText.push(d2);
+                            }
+                            //處理文字重疊位移造成的svg height變化
+
+                            //右側 arc_Outer_R
+                            if (ifRightSide && pos[1] < 0 && pos[1] - text_Box_H < (-text_R)) {
+                                var o_R_Top = 0 + Math.abs(text_R + pos[1]) + text_Box_H;
+                                if (o_R_Top > offsetTop.r) {
+                                    offsetTop.r = o_R_Top;
+                                    var newHeight = text_R * 2 + offsetTop.getMax() + offsetBottom.getMax();
+                                    $('#' + id + ' svg').attr('height', newHeight);
+                                    svg.attr("transform", "translate(" + box_W / 2 + "," + (text_R + offsetTop.getMax()) + ")");
+                                }
+                            }
+                            //左側 arc_Outer_R
+                            if (ifRightSide && pos[1] >= 0 && pos[1] + text_Box_H > text_R) {
+                                var o_R_Bottom = 0 + Math.abs(text_R - pos[1]) + text_Box_H;
+                                if (o_R_Bottom > offsetBottom.r) {
+                                    offsetBottom.r = o_R_Bottom;
+                                    var newHeight = text_R * 2 + offsetBottom.getMax() + offsetBottom.getMax();
+                                    $('#' + id + ' svg').attr('height', newHeight);
+                                    svg.attr("transform", "translate(" + box_W / 2 + "," + (text_R + offsetBottom.getMax()) + ")");
+                                }
+                            }
+
+                            //左側 top
+                            if (!ifRightSide && pos[1] < 0 && pos[1] - text_Box_H < (-text_R)) {
+                                var o_L_Top = 0 + Math.abs(text_R + pos[1]) + text_Box_H;
+                                if (o_L_Top > offsetTop.l) {
+                                    offsetTop.l = o_L_Top;
+                                    var newHeight = text_R * 2 + offsetTop.getMax() + offsetBottom.getMax();
+                                    $('#' + id + ' svg').attr('height', newHeight);
+                                    svg.attr("transform", "translate(" + box_W / 2 + "," + (text_R + offsetTop.getMax()) + ")");
+                                }
+                            }
+                            //左側 bottom
+                            if (!ifRightSide && pos[1] >= 0 && pos[1] + text_Box_H > text_R) {
+                                var o_L_Bottom = 0 + Math.abs(text_R - pos[1]) + text_Box_H;
+                                if (o_L_Bottom > offsetBottom.l) {
+                                    offsetBottom.l = o_L_Bottom;
+                                    var newHeight = text_R * 2 + offsetBottom.getMax() + offsetBottom.getMax();
+                                    $('#' + id + ' svg').attr('height', newHeight);
+
+                                }
+                            }
+                            return "translate(" + pos + ")";
+                        })
+                        .attr('text-anchor', function(d) {
+                            return d.data.sideValue == -1 ? "start" : "end";
+                        });
+
+                    text.exit()
+                        .remove();
+
+                    /* ------- SLICE TO TEXT POLYLINES -------*/
+
+                    /* ------- SLICE TO TEXT POLYLINES -------*/
+                    var polyline = svg.select(".lines").selectAll("g")
+                        .data(pie(data), function(d) {
+                            return d.data.label
+                        });
+
+                    polyline.enter()
+                        .append("polyline").style("stroke", function(d, i) {
+                            return colors[i];
+                        });
+
+                    polyline
+                        .attr("points", function(d) {
+                            this._current = this._current || d;
+                            var interpolate = d3.interpolate(this._current, d);
+                            var d2 = interpolate(0);
+                            // pos 文字連接位置
+                            var pos = arc.centroid(d2);
+                            var sideIndex = d.data.sideIndex;
+                            ifRightSide = d.data.sideValue>0;
+                            pos[0] = ifRightSide ? rightText[sideIndex].data.pos[0] : leftText[sideIndex].data.pos[0];
+                            pos[1] = ifRightSide ? rightText[sideIndex].data.pos[1] : leftText[sideIndex].data.pos[1];
+                            var midPosX = ifRightSide ? outerArc.centroid(d90)[0] : outerArc.centroid(d270)[0];
+                            var midPosY = pos[1];
+                            return [arc.centroid(d2), [midPosX, midPosY], pos];
+                        });
+
+                    polyline.exit().remove();
+                };
+            build();
+
+            $(window).resize(function(){
+              $('#' + id).empty();
+              build();
+            });
+    </script>
+</body>
